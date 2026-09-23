@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tabellone CSI Nuova Olonio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --nero: #000;
+    --bianco: #fff;
+    --verde: #0f7a3b;
+    --ui-bg: #0d1a12;
+    --ui-panel: #16271c;
+    --ui-line: #2a4232;
+    --ui-text: #eef4ef;
+    --ui-muted: #9db3a3;
+    --ui-accent: #3ddc84;
+    --ui-danger: #ff5a5f;
+    --display: "Anton", Impact, "Arial Narrow Bold", "Helvetica Neue Condensed", sans-serif;
+    --ui: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+
+  /* ---------- GRAFICA (per Moblin) ---------- */
+  body.grafica { background: transparent; overflow: hidden; }
+  body.grafica.anteprima { background: #2f6b3f repeating-linear-gradient(90deg, #2f6b3f 0 60px, #347545 60px 120px); }
+  #stage { position: fixed; inset: 0; overflow: hidden; }
+  #board { position: absolute; left: 50%; top: 50%; transform-origin: center center; transform: translate(-50%, -50%); transition: opacity .45s ease; }
+  #board.nascosto { opacity: 0; }
+
+  /* Layout grande (come l'esempio) */
+  .full { width: 1000px; background: var(--nero); padding: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .full .panel { background: var(--bianco); display: flex; flex-direction: column; align-items: center; padding: 22px 16px 12px; border-top: 10px solid var(--c, var(--nero)); min-width: 0; }
+  .full .logo { height: 150px; width: 150px; object-fit: contain; }
+  .full .name { font-family: var(--display); font-size: 76px; height: 92px; line-height: 92px; margin-top: 8px; text-align: center; }
+  .full .score { font-family: var(--display); font-size: 176px; line-height: 1; margin-top: 4px; }
+  .full .bar { grid-column: 1 / -1; color: var(--bianco); font-family: var(--display); font-size: 56px; line-height: 1; display: flex; justify-content: center; align-items: baseline; gap: 34px; padding: 10px 0 14px; }
+
+  /* Layout compatto (scorebug) */
+  .bug { display: flex; flex-direction: column; align-items: center; }
+  .bug .row { display: flex; align-items: stretch; height: 96px; background: var(--nero); padding: 5px; gap: 5px; }
+  .bug .team { background: var(--bianco); display: flex; align-items: center; gap: 14px; padding: 0 20px; width: 380px; min-width: 0; }
+  .bug .team.home { border-left: 12px solid var(--c, var(--nero)); }
+  .bug .team.away { border-right: 12px solid var(--c, var(--nero)); flex-direction: row-reverse; }
+  .bug .logo { height: 72px; width: 72px; object-fit: contain; flex: none; }
+  .bug .name { font-family: var(--display); font-size: 46px; line-height: 1.1; flex: 1; min-width: 0; }
+  .bug .team.away .name { text-align: right; }
+  .bug .scores { display: flex; align-items: center; color: var(--bianco); font-family: var(--display); font-size: 70px; line-height: 1; padding: 0 18px; gap: 18px; }
+  .bug .scores .sep { font-size: 44px; opacity: .6; }
+  .bug .tab { background: var(--nero); color: var(--bianco); font-family: var(--display); font-size: 34px; line-height: 1; padding: 6px 26px 10px; display: flex; gap: 20px; align-items: baseline; }
+
+  .name { white-space: nowrap; overflow: hidden; text-overflow: clip; max-width: 100%; text-transform: uppercase; color: var(--nero); letter-spacing: .5px; }
+  .initials { display: grid; place-items: center; border-radius: 50%; background: var(--c, #333); color: #fff; font-family: var(--display); flex: none; }
+  .full .initials { width: 150px; height: 150px; font-size: 64px; }
+  .bug .initials { width: 72px; height: 72px; font-size: 30px; }
+  .clock { font-variant-numeric: tabular-nums; }
+  .pop { animation: pop .6s ease-out; }
+  @keyframes pop { 0% { transform: scale(1); } 30% { transform: scale(1.25); } 100% { transform: scale(1); } }
+  @media (prefers-reduced-motion: reduce) { .pop { animation: none; } #board { transition: none; } }
+
+  /* ---------- PANNELLO + IMPOSTAZIONE ---------- */
+  body.ui { background: var(--ui-bg); color: var(--ui-text); font-family: var(--ui); font-size: 18px; padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 16px; }
+  header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  header.top h1 { font-family: var(--display); font-weight: 400; font-size: 30px; margin: 0; letter-spacing: .3px; }
+  .stato { display: flex; align-items: center; gap: 8px; font-size: 16px; color: var(--ui-muted); }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: #777; }
+  .dot.ok { background: var(--ui-accent); } .dot.invio { background: #f5c542; } .dot.err { background: var(--ui-danger); }
+  section.box { background: var(--ui-panel); border: 1px solid var(--ui-line); border-radius: 14px; padding: 14px; margin-bottom: 14px; }
+  section.box > h2 { font-size: 18px; font-weight: 600; color: var(--ui-muted); margin: 0 0 10px; }
+  .preview { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 10px; display: block; background: #2f6b3f; }
+  .teams { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .tcard { background: #0f1d14; border-radius: 12px; padding: 12px; text-align: center; border-top: 6px solid var(--c, #555); }
+  .tcard .tn { font-family: var(--display); font-size: 24px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tcard .ts { font-family: var(--display); font-size: 88px; line-height: 1.05; }
+  .tcard .btns { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; }
+  button, .btn { font-family: var(--ui); font-size: 20px; font-weight: 700; border: 0; border-radius: 10px; padding: 14px 10px; background: #26402f; color: var(--ui-text); cursor: pointer; touch-action: manipulation; }
+  button:active { transform: scale(.97); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--ui-accent); outline-offset: 2px; }
+  button.primario { background: var(--ui-accent); color: #062611; }
+  button.piu { background: var(--ui-accent); color: #062611; font-size: 28px; }
+  button.pericolo { background: #4a1f22; color: #ffd7d8; }
+  button.attivo { background: var(--ui-text); color: var(--ui-bg); }
+  .clockbig { font-family: var(--display); font-size: 84px; text-align: center; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .mt { margin-top: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chips button { padding: 10px 14px; font-size: 18px; }
+  label.f { display: block; font-size: 15px; color: var(--ui-muted); margin-bottom: 8px; }
+  input, select { width: 100%; font-family: var(--ui); font-size: 18px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--ui-line); background: #0b150e; color: var(--ui-text); margin-top: 4px; }
+  input[type=color] { padding: 2px; height: 44px; }
+  .inline { display: flex; gap: 8px; align-items: end; }
+  .inline > * { flex: 1; }
+  .linkrow { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .linkrow input { margin: 0; font-size: 15px; }
+  .linkrow button { flex: none; font-size: 16px; padding: 10px 14px; }
+  p.nota { color: var(--ui-muted); font-size: 16px; line-height: 1.45; margin: 6px 0 0; max-width: 70ch; }
+  @media (max-width: 560px) {
+    .grid4 { grid-template-columns: repeat(2, 1fr); }
+    .tcard .ts { font-size: 70px; }
+    .clockbig { font-size: 68px; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+(() => {
+  "use strict";
+
+  // Server di sincronizzazione gratuito (nessun account). Il "canale" è un codice casuale.
+  const SERVER = "https://ntfy.sh";
+  const PERIODI = ["1° TEMPO", "INTERVALLO", "2° TEMPO", "SUPPLEMENTARI", "RIGORI", "FINALE"];
+  const PAUSA_AUTO = ["INTERVALLO", "FINALE"];
+
+  const DEFAULT = () => ({
+    v: 1, rev: 0,
+    home: { name: "Nuova Olonio", logo: "loghi/nuovaolonio.jpg", color: "#0f7a3b", score: 0 },
+    away: { name: "Castione", logo: "loghi/castione.jpg", color: "#d6262b", score: 0 },
+    period: "1° TEMPO",
+    clock: { running: false, base: 0, startedAt: 0 },
+    showClock: true, visible: true, layout: "full"
+  });
+
+  const params = new URLSearchParams(location.search);
+  const vista = params.get("v");
+  const topic = (params.get("t") || "").replace(/[^A-Za-z0-9_-]/g, "");
+  const app = document.getElementById("app");
+
+  const baseUrl = location.origin + location.pathname;
+  const link = (v, t) => `${baseUrl}?v=${v}&t=${encodeURIComponent(t)}`;
+
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const elapsed = c => c.base + (c.running ? Math.max(0, Date.now() - c.startedAt) : 0);
+  const fmt = ms => { const s = Math.floor(Math.max(0, ms) / 1000); return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; };
+  const initials = n => (String(n || "?").trim().split(/\s+/).map(w => w[0]).join("").slice(0, 2) || "?").toUpperCase();
+
+  function merge(s) {
+    const d = DEFAULT();
+    if (!s || typeof s !== "object") return d;
+    return { ...d, ...s, home: { ...d.home, ...(s.home || {}) }, away: { ...d.away, ...(s.away || {}) }, clock: { ...d.clock, ...(s.clock || {}) } };
+  }
+
+  /* ---------- Sincronizzazione ---------- */
+  async function leggiUltimo(t) {
+    try {
+      const r = await fetch(`${SERVER}/${t}/json?poll=1&since=all`, { cache: "no-store" });
+      if (!r.ok) return null;
+      const righe = (await r.text()).trim().split("\n").filter(Boolean);
+      let migliore = null;
+      for (const riga of righe) {
+        try {
+          const m = JSON.parse(riga);
+          if (m.event !== "message") continue;
+          const s = JSON.parse(m.message);
+          if (!migliore || (s.rev || 0) >= (migliore.rev || 0)) migliore = s;
+        } catch (_) {}
+      }
+      return migliore;
+    } catch (_) { return null; }
+  }
+
+  function ascolta(t, onState, onStatus) {
+    let es = null;
+    const apri = () => {
+      try { es = new EventSource(`${SERVER}/${t}/sse`); } catch (_) { onStatus("err"); return; }
+      es.onopen = async () => { onStatus("ok"); const s = await leggiUltimo(t); if (s) onState(s); };
+      es.onmessage = e => {
+        try { const m = JSON.parse(e.data); if (m.event && m.event !== "message") return; onState(JSON.parse(m.message)); } catch (_) {}
+      };
+      es.onerror = () => onStatus("err");
+    };
+    apri();
+    // Riserva: se la connessione live è giù, controlla ogni 15 secondi
+    setInterval(async () => {
+      if (!es || es.readyState !== 1) { const s = await leggiUltimo(t); if (s) onState(s); }
+      if (es && es.readyState === 2) apri();
+    }, 15000);
+  }
+
+  async function pubblica(t, s) {
+    const r = await fetch(`${SERVER}/${t}`, { method: "POST", body: JSON.stringify(s) });
+    if (!r.ok) throw new Error(r.status === 429 ? "troppi" : "http" + r.status);
+  }
+
+  /* ---------- Grafica ---------- */
+  function logoHtml(team) {
+    const style = `--c:${esc(team.color)}`;
+    if (!team.logo) return `<div class="initials" style="${style}">${esc(initials(team.name))}</div>`;
+    return `<img class="logo" src="${esc(team.logo)}" alt="" data-ini="${esc(initials(team.name))}" data-c="${esc(team.color)}">`;
+  }
+
+  function avviaGrafica() {
+    document.body.className = "grafica" + (params.get("anteprima") ? " anteprima" : "");
+    app.innerHTML = `<div id="stage"><div id="board"></div></div>`;
+    const board = document.getElementById("board");
+    let stato = DEFAULT();
+    let firma = "";
+    let ultimiPunti = { h: null, a: null };
+
+    const adatta = () => {
+      const w = board.offsetWidth, h = board.offsetHeight;
+      if (!w || !h) return;
+      board.style.transform = `translate(-50%, -50%) scale(${Math.min(innerWidth / w, innerHeight / h)})`;
+    };
+    const stringiNomi = () => {
+      board.querySelectorAll(".name").forEach(el => {
+        el.style.fontSize = "";
+        let size = parseFloat(getComputedStyle(el).fontSize);
+        while (el.scrollWidth > el.clientWidth + 1 && size > 14) { size -= 2; el.style.fontSize = size + "px"; }
+      });
+    };
+
+    function barra() {
+      const fin = stato.period === "FINALE";
+      const tempo = stato.showClock && !fin ? `<span class="clock">${fmt(elapsed(stato.clock))}</span>` : "";
+      return `<span>${esc(fin ? "FINALE" : stato.period)}</span>${tempo}`;
+    }
+
+    function disegna() {
+      const s = stato;
+      const nuovaFirma = JSON.stringify([s.layout, s.home.name, s.home.logo, s.home.color, s.away.name, s.away.logo, s.away.color]);
+      if (nuovaFirma !== firma) {
+        firma = nuovaFirma;
+        if (s.layout === "bug") {
+          board.innerHTML = `<div class="bug">
+            <div class="row">
+              <div class="team home" style="--c:${esc(s.home.color)}">${logoHtml(s.home)}<div class="name">${esc(s.home.name)}</div></div>
+              <div class="scores"><span id="sh">0</span><span class="sep">–</span><span id="sa">0</span></div>
+              <div class="team away" style="--c:${esc(s.away.color)}">${logoHtml(s.away)}<div class="name">${esc(s.away.name)}</div></div>
+            </div>
+            <div class="tab" id="bar"></div></div>`;
+        } else {
+          board.innerHTML = `<div class="full">
+            <div class="panel" style="--c:${esc(s.home.color)}">${logoHtml(s.home)}<div class="name">${esc(s.home.name)}</div><div class="score" id="sh">0</div></div>
+            <div class="panel" style="--c:${esc(s.away.color)}">${logoHtml(s.away)}<div class="name">${esc(s.away.name)}</div><div class="score" id="sa">0</div></div>
+            <div class="bar" id="bar"></div></div>`;
+        }
+        board.querySelectorAll("img.logo").forEach(img => {
+          img.addEventListener("load", adatta);
+          img.addEventListener("error", () => {
+            const d = document.createElement("div");
+            d.className = "initials"; d.style.setProperty("--c", img.dataset.c || "#333"); d.textContent = img.dataset.ini;
+            img.replaceWith(d); adatta();
+          });
+        });
+        ultimiPunti = { h: null, a: null };
+        stringiNomi();
+      }
+      const sh = document.getElementById("sh"), sa = document.getElementById("sa");
+      if (ultimiPunti.h !== null && ultimiPunti.h !== s.home.score) { sh.classList.remove("pop"); void sh.offsetWidth; sh.classList.add("pop"); }
+      if (ultimiPunti.a !== null && ultimiPunti.a !== s.away.score) { sa.classList.remove("pop"); void sa.offsetWidth; sa.classList.add("pop"); }
+      sh.textContent = s.home.score; sa.textContent = s.away.score;
+      ultimiPunti = { h: s.home.score, a: s.away.score };
+      document.getElementById("bar").innerHTML = barra();
+      board.classList.toggle("nascosto", !s.visible);
+      adatta();
+    }
+
+    const applica = s => { if (!s) return; if ((s.rev || 0) < (stato.rev || 0)) return; stato = merge(s); disegna(); };
+    disegna();
+    addEventListener("resize", adatta);
+    if (document.fonts) document.fonts.ready.then(() => { stringiNomi(); adatta(); });
+    setInterval(() => { const b = document.getElementById("bar"); if (b && stato.clock.running) b.innerHTML = barra(); }, 250);
+    if (topic) { leggiUltimo(topic).then(applica); ascolta(topic, applica, () => {}); }
+  }
+
+  /* ---------- Pannello di controllo ---------- */
+  function avviaPannello() {
+    document.body.className = "ui";
+    const CHIAVE = "tabellone:" + topic;
+    let stato = DEFAULT();
+    try { const l = localStorage.getItem(CHIAVE); if (l) stato = merge(JSON.parse(l)); } catch (_) {}
+    let timer = null, inAttesa = false;
+
+    app.innerHTML = `<div class="wrap">
+      <header class="top"><h1>Regia tabellone</h1><div class="stato"><span class="dot" id="dot"></span><span id="statoTxt">Connessione…</span></div></header>
+
+      <section class="box"><h2>Anteprima di quello che va in diretta</h2>
+        <iframe class="preview" id="prev" title="Anteprima grafica" src="${esc(link("grafica", topic))}&anteprima=1"></iframe>
+      </section>
+
+      <section class="box"><h2>Punteggio</h2>
+        <div class="teams">
+          <div class="tcard" id="cardH"><div class="tn" id="nH"></div><div class="ts" id="pH"></div>
+            <div class="btns"><button data-a="h-">−1</button><button class="piu" data-a="h+">+1</button></div></div>
+          <div class="tcard" id="cardA"><div class="tn" id="nA"></div><div class="ts" id="pA"></div>
+            <div class="btns"><button data-a="a-">−1</button><button class="piu" data-a="a+">+1</button></div></div>
+        </div>
+      </section>
+
+      <section class="box"><h2>Cronometro</h2>
+        <div class="clockbig" id="cl">00:00</div>
+        <div class="grid2"><button class="primario" id="startBtn" data-a="start">Avvia</button><button class="pericolo" data-a="zero">Azzera</button></div>
+        <div class="grid4 mt"><button data-a="m-">−1 min</button><button data-a="s-">−10 s</button><button data-a="s+">+10 s</button><button data-a="m+">+1 min</button></div>
+        <div class="inline mt"><label class="f">Imposta tempo (mm:ss)<input id="setT" inputmode="numeric" placeholder="25:00"></label><button data-a="set">Imposta</button></div>
+      </section>
+
+      <section class="box"><h2>Fase della partita</h2>
+        <div class="chips" id="periodi">${PERIODI.map(p => `<button data-p="${esc(p)}">${esc(p)}</button>`).join("")}</div>
+        <div class="inline mt"><label class="f">Testo personalizzato<input id="perCustom" maxlength="24" placeholder="Es. 3° TEMPO"></label><button data-a="perCustom">Mostra</button></div>
+        <p class="nota">Intervallo e Finale mettono in pausa il cronometro.</p>
+      </section>
+
+      <section class="box"><h2>Grafica</h2>
+        <div class="grid3">
+          <button id="bVis" data-a="vis"></button>
+          <button id="bLay" data-a="lay"></button>
+          <button id="bClk" data-a="clk"></button>
+        </div>
+      </section>
+
+      <section class="box"><h2>Squadre</h2>
+        <div class="grid2">
+          <div>
+            <label class="f">Casa<input id="hName" maxlength="24"></label>
+            <label class="f">Logo (file nella cartella loghi o link)<input id="hLogo" placeholder="loghi/nuovaolonio.jpg"></label>
+            <label class="f">Colore<input type="color" id="hColor"></label>
+          </div>
+          <div>
+            <label class="f">Ospiti<input id="aName" maxlength="24"></label>
+            <label class="f">Logo (file nella cartella loghi o link)<input id="aLogo" placeholder="loghi/avversari.jpg"></label>
+            <label class="f">Colore<input type="color" id="aColor"></label>
+          </div>
+        </div>
+        <div class="grid3 mt"><button class="primario" data-a="salvaSquadre">Aggiorna squadre</button><button data-a="scambia">Scambia casa e ospiti</button><button class="pericolo" data-a="nuova">Nuova partita</button></div>
+        <p class="nota">Senza logo, o se il file non si trova, la grafica mostra le iniziali nel colore della squadra.</p>
+      </section>
+
+      <section class="box"><h2>Link</h2>
+        <label class="f">Grafica da mettere su Moblin (widget browser)</label>
+        <div class="linkrow"><input readonly id="lG" value="${esc(link("grafica", topic))}"><button data-copy="lG">Copia</button></div>
+        <label class="f">Questo pannello (tienilo per te: chi lo apre può cambiare il punteggio)</label>
+        <div class="linkrow"><input readonly id="lP" value="${esc(link("pannello", topic))}"><button data-copy="lP">Copia</button></div>
+      </section>
+    </div>`;
+
+    const $ = id => document.getElementById(id);
+    const setStato = (cls, txt) => { $("dot").className = "dot " + cls; $("statoTxt").textContent = txt; };
+
+    function riempiSquadre() {
+      $("hName").value = stato.home.name; $("hLogo").value = stato.home.logo; $("hColor").value = stato.home.color;
+      $("aName").value = stato.away.name; $("aLogo").value = stato.away.logo; $("aColor").value = stato.away.color;
+    }
+    function disegna() {
+      $("nH").textContent = stato.home.name; $("nA").textContent = stato.away.name;
+      $("pH").textContent = stato.home.score; $("pA").textContent = stato.away.score;
+      $("cardH").style.setProperty("--c", stato.home.color); $("cardA").style.setProperty("--c", stato.away.color);
+      $("startBtn").textContent = stato.clock.running ? "Pausa" : "Avvia";
+      $("startBtn").className = stato.clock.running ? "" : "primario";
+      $("bVis").textContent = stato.visible ? "Nascondi grafica" : "Mostra grafica";
+      $("bVis").className = stato.visible ? "" : "attivo";
+      $("bLay").textContent = stato.layout === "full" ? "Passa a compatto" : "Passa a grande";
+      $("bClk").textContent = stato.showClock ? "Nascondi tempo" : "Mostra tempo";
+      document.querySelectorAll("#periodi button").forEach(b => b.classList.toggle("attivo", b.dataset.p === stato.period));
+      $("cl").textContent = fmt(elapsed(stato.clock));
+    }
+
+    function cambia(fn) {
+      fn(stato);
+      stato.rev = Date.now();
+      try { localStorage.setItem(CHIAVE, JSON.stringify(stato)); } catch (_) {}
+      disegna();
+      inAttesa = true; setStato("invio", "Invio…");
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        try { await pubblica(topic, stato); inAttesa = false; setStato("ok", "In onda"); }
+        catch (e) { inAttesa = false; setStato("err", e.message === "troppi" ? "Troppi invii, riprova tra poco" : "Invio non riuscito, controlla la rete"); }
+      }, 350);
+    }
+
+    const pausa = c => { if (c.running) { c.base = elapsed(c); c.running = false; } };
+    const setTempo = (c, ms) => { c.base = Math.max(0, ms); if (c.running) c.startedAt = Date.now(); };
+    const sposta = (c, d) => { const now = elapsed(c); setTempo(c, now + d); };
+
+    document.addEventListener("click", e => {
+      const b = e.target.closest("button"); if (!b) return;
+      if (b.dataset.copy) {
+        const inp = $(b.dataset.copy); inp.select();
+        (navigator.clipboard ? navigator.clipboard.writeText(inp.value) : Promise.reject()).then(() => { b.textContent = "Copiato"; }).catch(() => { document.execCommand("copy"); b.textContent = "Copiato"; });
+        setTimeout(() => b.textContent = "Copia", 1500); return;
+      }
+      if (b.dataset.p) { const p = b.dataset.p; cambia(s => { s.period = p; if (PAUSA_AUTO.includes(p)) pausa(s.clock); }); return; }
+      const a = b.dataset.a; if (!a) return;
+      switch (a) {
+        case "h+": cambia(s => s.home.score++); break;
+        case "h-": cambia(s => s.home.score = Math.max(0, s.home.score - 1)); break;
+        case "a+": cambia(s => s.away.score++); break;
+        case "a-": cambia(s => s.away.score = Math.max(0, s.away.score - 1)); break;
+        case "start": cambia(s => { const c = s.clock; if (c.running) pausa(c); else { c.running = true; c.startedAt = Date.now(); } }); break;
+        case "zero": if (confirm("Azzerare il cronometro?")) cambia(s => { s.clock = { running: false, base: 0, startedAt: 0 }; }); break;
+        case "m+": cambia(s => sposta(s.clock, 60000)); break;
+        case "m-": cambia(s => sposta(s.clock, -60000)); break;
+        case "s+": cambia(s => sposta(s.clock, 10000)); break;
+        case "s-": cambia(s => sposta(s.clock, -10000)); break;
+        case "set": {
+          const m = $("setT").value.trim().match(/^(\d{1,3})(?::(\d{1,2}))?$/);
+          if (!m) { $("setT").focus(); break; }
+          const ms = (parseInt(m[1], 10) * 60 + parseInt(m[2] || "0", 10)) * 1000;
+          cambia(s => setTempo(s.clock, ms)); $("setT").value = ""; break;
+        }
+        case "perCustom": { const t = $("perCustom").value.trim().toUpperCase(); if (t) cambia(s => s.period = t); break; }
+        case "vis": cambia(s => s.visible = !s.visible); break;
+        case "lay": cambia(s => s.layout = s.layout === "full" ? "bug" : "full"); break;
+        case "clk": cambia(s => s.showClock = !s.showClock); break;
+        case "salvaSquadre": cambia(s => {
+          s.home.name = $("hName").value.trim() || "Casa"; s.home.logo = $("hLogo").value.trim(); s.home.color = $("hColor").value;
+          s.away.name = $("aName").value.trim() || "Ospiti"; s.away.logo = $("aLogo").value.trim(); s.away.color = $("aColor").value;
+        }); break;
+        case "scambia": cambia(s => { const h = s.home; s.home = s.away; s.away = h; }); riempiSquadre(); break;
+        case "nuova": if (confirm("Nuova partita: punteggio a 0-0, cronometro azzerato e 1° tempo. Le squadre restano. Continuare?"))
+          cambia(s => { s.home.score = 0; s.away.score = 0; s.clock = { running: false, base: 0, startedAt: 0 }; s.period = "1° TEMPO"; s.visible = true; }); break;
+      }
+    });
+
+    riempiSquadre(); disegna();
+    setInterval(() => { $("cl").textContent = fmt(elapsed(stato.clock)); }, 250);
+
+    // Recupera lo stato dal server (utile se riapri il pannello o usi due dispositivi)
+    leggiUltimo(topic).then(s => {
+      if (s && (s.rev || 0) > (stato.rev || 0)) { stato = merge(s); riempiSquadre(); disegna(); }
+      else if (!s) { cambia(() => {}); }
+    });
+    ascolta(topic, s => {
+      if (inAttesa || !s || (s.rev || 0) <= (stato.rev || 0)) return;
+      stato = merge(s); disegna(); riempiSquadre();
+    }, st => { if (!inAttesa) setStato(st === "ok" ? "ok" : "err", st === "ok" ? "In onda" : "Connessione persa, riprovo…"); });
+  }
+
+  /* ---------- Pagina iniziale: crea i link ---------- */
+  function avviaImpostazione() {
+    document.body.className = "ui";
+    let t = "";
+    try { t = localStorage.getItem("tabellone:canale") || ""; } catch (_) {}
+    if (!t) {
+      const a = new Uint8Array(12); crypto.getRandomValues(a);
+      t = "csino-" + Array.from(a, x => "abcdefghijkmnpqrstuvwxyz23456789"[x % 32]).join("");
+      try { localStorage.setItem("tabellone:canale", t); } catch (_) {}
+    }
+    app.innerHTML = `<div class="wrap">
+      <header class="top"><h1>Tabellone CSI Nuova Olonio</h1></header>
+      <section class="box"><h2>I tuoi due link</h2>
+        <label class="f">Grafica: incollala in Moblin come widget browser</label>
+        <div class="linkrow"><input readonly id="lG" value="${esc(link("grafica", t))}"><button data-copy="lG">Copia</button></div>
+        <label class="f">Pannello di controllo: aprilo sull'iPad o sul telefono di chi segna il punteggio</label>
+        <div class="linkrow"><input readonly id="lP" value="${esc(link("pannello", t))}"><button data-copy="lP">Copia</button></div>
+        <div class="grid2 mt"><button class="primario" id="apri">Apri il pannello</button><button id="rigenera">Crea nuovi link</button></div>
+        <p class="nota">Il codice nei link fa da password: chi ha il link del pannello può cambiare il punteggio. Salva i link nelle note, così li ritrovi ogni partita. "Crea nuovi link" rende inutilizzabili quelli vecchi.</p>
+      </section></div>`;
+    document.getElementById("apri").onclick = () => location.href = link("pannello", t);
+    document.getElementById("rigenera").onclick = () => {
+      if (!confirm("Creare nuovi link? Dovrai aggiornare l'URL anche in Moblin.")) return;
+      try { localStorage.removeItem("tabellone:canale"); } catch (_) {}
+      avviaImpostazione();
+    };
+    document.addEventListener("click", e => {
+      const b = e.target.closest("button[data-copy]"); if (!b) return;
+      const inp = document.getElementById(b.dataset.copy); inp.select();
+      (navigator.clipboard ? navigator.clipboard.writeText(inp.value) : Promise.reject()).then(() => b.textContent = "Copiato").catch(() => { document.execCommand("copy"); b.textContent = "Copiato"; });
+      setTimeout(() => b.textContent = "Copia", 1500);
+    });
+  }
+
+  if (vista === "grafica") avviaGrafica();
+  else if (vista === "pannello" && topic) avviaPannello();
+  else avviaImpostazione();
+})();
+</script>
+</body>
+</html>

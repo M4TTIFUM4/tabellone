@@ -204,10 +204,25 @@
     let firma = "";
     let ultimiPunti = { h: null, a: null };
 
+    // Posizione e grandezza dentro il widget: &pos=alto|basso|centro|alto-sinistra|alto-destra|basso-sinistra|basso-destra  &larghezza=10..100 (%)
+    const POS = (params.get("pos") || "centro").toLowerCase();
+    const LARG = Math.min(100, Math.max(10, parseFloat(params.get("larghezza")) || 100)) / 100;
     const adatta = () => {
       const w = board.offsetWidth, h = board.offsetHeight;
       if (!w || !h) return;
-      board.style.transform = `translate(-50%, -50%) scale(${Math.min(innerWidth / w, innerHeight / h)})`;
+      const m = POS === "centro" ? 0 : Math.round(innerHeight * 0.03);
+      const sc = Math.min((innerWidth - 2 * m) * LARG / w, (innerHeight - 2 * m) / h);
+      const st = board.style;
+      st.left = st.right = st.top = st.bottom = "auto";
+      let ox = "center", oy = "center", tx = "-50%", ty = "-50%";
+      if (POS.includes("sinistra")) { st.left = m + "px"; ox = "left"; tx = "0"; }
+      else if (POS.includes("destra")) { st.right = m + "px"; ox = "right"; tx = "0"; }
+      else st.left = "50%";
+      if (POS.startsWith("alto")) { st.top = m + "px"; oy = "top"; ty = "0"; }
+      else if (POS.startsWith("basso")) { st.bottom = m + "px"; oy = "bottom"; ty = "0"; }
+      else st.top = "50%";
+      st.transformOrigin = `${ox} ${oy}`;
+      st.transform = `translate(${tx}, ${ty}) scale(${sc})`;
     };
     const stringiNomi = () => {
       board.querySelectorAll(".name").forEach(el => {

@@ -60,6 +60,25 @@
   .clock { font-variant-numeric: tabular-nums; }
   .pop { animation: pop .6s ease-out; }
   @keyframes pop { 0% { transform: scale(1); } 30% { transform: scale(1.25); } 100% { transform: scale(1); } }
+  /* Animazione gol a schermo intero (solo transform e opacity: leggera per il telefono) */
+  .goalfx { position: fixed; inset: 0; overflow: hidden; z-index: 10; pointer-events: none; color: var(--t, #fff); animation: gf-out .45s ease-in 3.9s forwards; }
+  .gf-band { position: absolute; top: -25%; bottom: -25%; left: -35%; width: 170%; transform: translateX(-120%) skewX(-12deg); }
+  .gf-band.b1 { background: var(--c); animation: gf-in .5s cubic-bezier(.2,.8,.2,1) forwards; }
+  .gf-band.b2 { background: repeating-linear-gradient(90deg, rgba(0,0,0,.16) 0 6vmin, transparent 6vmin 12vmin); animation: gf-in .5s cubic-bezier(.2,.8,.2,1) .08s forwards; }
+  .gf-band.b3 { left: 40%; width: 8%; background: rgba(255,255,255,.35); animation: gf-flash .7s ease-out .25s forwards; }
+  .gf-content { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.2vmin; }
+  .gf-logo { width: 24vmin; height: 24vmin; background: #fff; border-radius: 3vmin; padding: 1.4vmin; box-shadow: 0 2vmin 5vmin rgba(0,0,0,.35); display: grid; place-items: center; animation: gf-pop .6s cubic-bezier(.2,1.4,.4,1) .35s both; }
+  .gf-logo img { width: 100%; height: 100%; object-fit: contain; }
+  .gf-logo .initials { width: 100%; height: 100%; font-size: 9vmin; }
+  .gf-word { font-family: var(--display); font-size: 26vmin; line-height: .95; letter-spacing: .5vmin; text-shadow: 0 1.2vmin 0 rgba(0,0,0,.28); animation: gf-slam .5s cubic-bezier(.2,.9,.3,1) .55s both; }
+  .gf-team { font-family: var(--display); font-size: 7vmin; line-height: 1; text-transform: uppercase; animation: gf-up .4s ease-out .95s both; }
+  .gf-score { font-family: var(--display); font-size: 8vmin; line-height: 1; background: #000; color: #fff; padding: 1vmin 3.5vmin 1.4vmin; margin-top: 1vmin; animation: gf-up .4s ease-out 1.15s both; }
+  @keyframes gf-in { to { transform: translateX(0) skewX(-12deg); } }
+  @keyframes gf-flash { 0% { transform: translateX(-900%) skewX(-12deg); opacity: 1; } 100% { transform: translateX(900%) skewX(-12deg); opacity: 0; } }
+  @keyframes gf-pop { from { transform: scale(0) rotate(-18deg); } to { transform: scale(1) rotate(0); } }
+  @keyframes gf-slam { from { transform: scale(2.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  @keyframes gf-up { from { transform: translateY(4vmin); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes gf-out { to { opacity: 0; transform: scale(1.04); } }
   @media (prefers-reduced-motion: reduce) { .pop { animation: none; } #board { transition: none; } }
 
   /* ---------- PANNELLO + IMPOSTAZIONE ---------- */
@@ -125,7 +144,8 @@
     away: { name: "Nuova Olonio", logo: "loghi/nuovaolonio.jpg", color: "#0f7a3b", score: 0 },
     period: "1° TEMPO",
     clock: { running: false, base: 0, startedAt: 0 },
-    showClock: true, visible: true, layout: "full"
+    showClock: true, visible: true, layout: "full",
+    goalFx: true, fxTest: { at: 0, side: "home" }
   });
 
   const params = new URLSearchParams(location.search);
@@ -278,12 +298,49 @@
       adatta();
     }
 
-    const applica = s => { if (!s) return; if ((s.rev || 0) < (stato.rev || 0)) return; stato = merge(s); disegna(); };
+    // Colore del testo leggibile sopra il colore squadra
+    const chiaro = hex => { const m = /^#?([0-9a-f]{6})$/i.exec(hex || ""); if (!m) return false; const n = parseInt(m[1], 16);
+      return (0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) > 170; };
+    let fxTimer = null;
+    function animaGol(side) {
+      const t = stato[side];
+      document.querySelectorAll(".goalfx").forEach(e => e.remove());
+      clearTimeout(fxTimer);
+      const el = document.createElement("div");
+      el.className = "goalfx";
+      el.style.setProperty("--c", t.color || "#0f7a3b");
+      el.style.setProperty("--t", chiaro(t.color) ? "#000" : "#fff");
+      const logo = t.logo ? `<img src="${esc(t.logo)}" alt="">` : `<div class="initials" style="--c:${esc(t.color)}">${esc(initials(t.name))}</div>`;
+      el.innerHTML = `<div class="gf-band b1"></div><div class="gf-band b2"></div><div class="gf-band b3"></div>
+        <div class="gf-content"><div class="gf-logo">${logo}</div><div class="gf-word">GOAL!</div>
+        <div class="gf-team">${esc(t.name)}</div><div class="gf-score">${stato.home.score} – ${stato.away.score}</div></div>`;
+      const img = el.querySelector("img");
+      if (img) img.addEventListener("error", () => { img.outerHTML = `<div class="initials" style="--c:${esc(t.color)}">${esc(initials(t.name))}</div>`; });
+      document.body.appendChild(el);
+      fxTimer = setTimeout(() => el.remove(), 4500);
+    }
+    let pronto = false;
+    const applica = s => {
+      if (!s) return;
+      if ((s.rev || 0) < (stato.rev || 0)) return;
+      const prima = stato;
+      stato = merge(s);
+      disegna();
+      // Anima solo modifiche recenti (non quando la pagina si ricollega e recupera uno stato vecchio)
+      const fresco = Date.now() - (stato.rev || 0) < 20000;
+      const ridotto = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (!pronto || !fresco || ridotto) return;
+      if (stato.fxTest && stato.fxTest.at > ((prima.fxTest && prima.fxTest.at) || 0)) { animaGol(stato.fxTest.side === "away" ? "away" : "home"); return; }
+      if (stato.goalFx === false) return;
+      if (stato.home.score > prima.home.score) animaGol("home");
+      else if (stato.away.score > prima.away.score) animaGol("away");
+    };
     disegna();
     addEventListener("resize", adatta);
     if (document.fonts) document.fonts.ready.then(() => { stringiNomi(); adatta(); });
     setInterval(() => { const b = document.getElementById("bar"); if (b && stato.clock.running) b.innerHTML = barra(); }, 250);
-    if (topic) { leggiUltimo(topic).then(applica); ascolta(topic, applica, () => {}); }
+    if (topic) { leggiUltimo(topic).then(s => { applica(s); pronto = true; }); ascolta(topic, s => { if (pronto) applica(s); }, () => {}); }
+    else pronto = true;
   }
 
   /* ---------- Pannello di controllo ---------- */
@@ -329,6 +386,12 @@
           <button id="bLay" data-a="lay"></button>
           <button id="bClk" data-a="clk"></button>
         </div>
+        <div class="grid3 mt">
+          <button id="bFx" data-a="fx"></button>
+          <button data-a="fxH">Prova gol casa</button>
+          <button data-a="fxA">Prova gol ospiti</button>
+        </div>
+        <p class="nota">L'animazione parte da sola a ogni +1. Per correggere un punteggio senza animazione, disattivala prima.</p>
       </section>
 
       <section class="box"><h2>Squadre</h2>
@@ -373,6 +436,8 @@
       $("bVis").className = stato.visible ? "" : "attivo";
       $("bLay").textContent = stato.layout === "full" ? "Passa a compatto" : "Passa a grande";
       $("bClk").textContent = stato.showClock ? "Nascondi tempo" : "Mostra tempo";
+      $("bFx").textContent = stato.goalFx !== false ? "Animazione gol: sì" : "Animazione gol: no";
+      $("bFx").className = stato.goalFx !== false ? "attivo" : "";
       document.querySelectorAll("#periodi button").forEach(b => b.classList.toggle("attivo", b.dataset.p === stato.period));
       $("cl").textContent = fmt(elapsed(stato.clock));
     }
@@ -424,6 +489,9 @@
         case "vis": cambia(s => s.visible = !s.visible); break;
         case "lay": cambia(s => s.layout = s.layout === "full" ? "bug" : "full"); break;
         case "clk": cambia(s => s.showClock = !s.showClock); break;
+        case "fx": cambia(s => s.goalFx = s.goalFx === false); break;
+        case "fxH": cambia(s => s.fxTest = { at: Date.now(), side: "home" }); break;
+        case "fxA": cambia(s => s.fxTest = { at: Date.now(), side: "away" }); break;
         case "salvaSquadre": cambia(s => {
           s.home.name = $("hName").value.trim() || "Casa"; s.home.logo = $("hLogo").value.trim(); s.home.color = $("hColor").value;
           s.away.name = $("aName").value.trim() || "Ospiti"; s.away.logo = $("aLogo").value.trim(); s.away.color = $("aColor").value;
